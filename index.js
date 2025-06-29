@@ -40,26 +40,20 @@ app.get("/", (req, res) => {
   res.send("📦 Parcel Delivery Server is Running");
 });
 
-// ✅ Get All Parcels
+// Parcels API
+// ✅ Get All Parcels and Parcels by User Email
 app.get("/parcels", async (req, res) => {
   try {
-    const parcels = await parcelsCollection.find().toArray();
-    res.send(parcels);
-  } catch (err) {
-    res.status(500).send({ error: "❌ Failed to fetch parcels" });
-  }
-});
-
-// ✅ Get Parcels by User Email (optional)
-app.get("/parcels/user", async (req, res) => {
-  const email = req.query.email;
-  try {
-    const result = await parcelsCollection
-      .find({ created_by: email })
-      .toArray();
+    const { email } = req.query;
+    const query = email ? { created_by: email } : {};
+    const options = {
+      sort: { creation_date: -1 }, // 🔽 Latest first
+    };
+    const result = await parcelsCollection.find(query, options).toArray();
     res.send(result);
   } catch (err) {
-    res.status(500).send({ error: "❌ Failed to fetch user parcels" });
+    console.error("❌ Error fetching parcels:", err);
+    res.status(500).send({ error: "Failed to fetch parcels" });
   }
 });
 
