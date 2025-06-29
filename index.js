@@ -2,7 +2,7 @@
 import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
-import { MongoClient } from "mongodb";
+import { MongoClient, ObjectId } from "mongodb";
 
 dotenv.config();
 const app = express();
@@ -65,6 +65,31 @@ app.post("/parcels", async (req, res) => {
     res.send(result);
   } catch (err) {
     res.status(500).send({ error: "❌ Failed to insert parcel" });
+  }
+});
+
+// DELETE a parcel by ID
+app.delete("/parcels/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid parcel ID." });
+    }
+
+    const result = await parcelsCollection.deleteOne({ _id: new ObjectId(id) });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ message: "Parcel not found." });
+    }
+
+    res.status(200).json({
+      message: "Parcel deleted successfully.",
+      deletedCount: result.deletedCount,
+    });
+  } catch (error) {
+    console.error("Delete error:", error);
+    res.status(500).json({ message: "Internal Server Error" });
   }
 });
 
