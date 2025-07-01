@@ -57,6 +57,29 @@ app.get("/parcels", async (req, res) => {
   }
 });
 
+// GET /parcels/:id
+app.get("/parcels/:id", async (req, res) => {
+  const { id } = req.params;
+
+  // Check if valid MongoDB ObjectId
+  if (!ObjectId.isValid(id)) {
+    return res.status(400).json({ error: "Invalid parcel ID" });
+  }
+
+  try {
+    const parcel = await parcelsCollection.findOne({ _id: new ObjectId(id) });
+
+    if (!parcel) {
+      return res.status(404).json({ error: "Parcel not found" });
+    }
+
+    res.json(parcel);
+  } catch (error) {
+    console.error("Error fetching parcel:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
 // ✅ Save Parcel to MongoDB
 app.post("/parcels", async (req, res) => {
   const parcel = req.body;
@@ -90,6 +113,23 @@ app.delete("/parcels/:id", async (req, res) => {
   } catch (error) {
     console.error("Delete error:", error);
     res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+// Stripe create payment intent api
+app.post("/create-payment-intent", async (req, res) => {
+  try {
+    const { amount, currency } = req.body;
+
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount,
+      currency,
+      automatic_payment_methods: { enabled: true },
+    });
+
+    res.json({ clientSecret: paymentIntent.client_secret });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
