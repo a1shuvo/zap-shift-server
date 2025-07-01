@@ -3,8 +3,10 @@ import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
 import { MongoClient, ObjectId } from "mongodb";
+import Stripe from "stripe";
 
 dotenv.config();
+const stripe = new Stripe(process.env.PAYMENT_GATEWAY_KEY);
 const app = express();
 const port = process.env.PORT || 5000;
 
@@ -119,11 +121,11 @@ app.delete("/parcels/:id", async (req, res) => {
 // Stripe create payment intent api
 app.post("/create-payment-intent", async (req, res) => {
   try {
-    const { amount, currency } = req.body;
+    const { amountInCents } = req.body;
 
     const paymentIntent = await stripe.paymentIntents.create({
-      amount,
-      currency,
+      amount: amountInCents,
+      currency: "usd",
       automatic_payment_methods: { enabled: true },
     });
 
