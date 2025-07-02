@@ -24,12 +24,14 @@ const client = new MongoClient(process.env.MONGODB_URI, {
 });
 
 let parcelsCollection;
+let paymentsCollection;
 
 async function connectDB() {
   try {
     await client.connect();
     const db = client.db("parcelDB");
     parcelsCollection = db.collection("parcels");
+    paymentsCollection = db.collection("payments");
     console.log("✅ Connected to MongoDB");
   } catch (err) {
     console.error("❌ MongoDB Connection Failed:", err);
@@ -118,6 +120,65 @@ app.delete("/parcels/:id", async (req, res) => {
   }
 });
 
+// Get payments history
+app.get("/payments", async (req, res) => {
+  try {
+    const userEmail = req.query.email;
+
+    const query = userEmail ? { email: userEmail } : {};
+    const options = { sort: { paid_at: -1 } }; // Latest First
+
+    const payments = await paymentsCollection.find(query, options).toArray();
+    res.json(payments);
+  } catch (error) {
+    console.error("Error fetching payment history:", error);
+    res.status(500).json({ message: "Failed to get payments" });
+  }
+});
+
+// Record Payment and update parcel status
+app.post("/payments", async (req, res) => {
+  try {
+    const { parcelId, email, amount, paymentMethod, transactionId } = req.body;
+
+    if (!parcelId || !email || !amount) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    // Update parcel payment status
+    const updateResult = await parcelsCollection.updateOne(
+      { _id: new ObjectId(parcelId) },
+      { $set: { payment_status: "paid" } }
+    );
+
+    if (updateResult.modifiedCount === 0) {
+      return res
+        .status(404)
+        .send({ message: "Parcel not found or already paid!" });
+    }
+
+    // Insert payment record
+    const paymentDoc = {
+      parcelId,
+      email,
+      amount,
+      paymentMethod,
+      transactionId,
+      paid_at_string: new Date().toISOString(),
+      paid_at: new Date(),
+    };
+
+    const paymentResult = await paymentsCollection.insertOne(paymentDoc);
+    res.status(201).send({
+      message: "Payment recorded and parcel marked as recorded!",
+      insertedId: paymentResult.insertedId,
+    });
+  } catch (error) {
+    console.error("❌ Payment Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
 // Stripe create payment intent api
 app.post("/create-payment-intent", async (req, res) => {
   try {
@@ -126,7 +187,7 @@ app.post("/create-payment-intent", async (req, res) => {
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amountInCents,
       currency: "usd",
-      automatic_payment_methods: { enabled: true },
+      payment_method_types: ["card"],
     });
 
     res.json({ clientSecret: paymentIntent.client_secret });
