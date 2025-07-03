@@ -23,15 +23,19 @@ const client = new MongoClient(process.env.MONGODB_URI, {
   },
 });
 
+let usersCollection;
 let parcelsCollection;
 let paymentsCollection;
+let trackingCollection;
 
 async function connectDB() {
   try {
     await client.connect();
     const db = client.db("parcelDB");
+    usersCollection = db.collection("users");
     parcelsCollection = db.collection("parcels");
     paymentsCollection = db.collection("payments");
+    trackingCollection = db.collection("tracking");
     console.log("✅ Connected to MongoDB");
   } catch (err) {
     console.error("❌ MongoDB Connection Failed:", err);
@@ -42,6 +46,30 @@ connectDB();
 // ✅ Test Route
 app.get("/", (req, res) => {
   res.send("📦 Parcel Delivery Server is Running");
+});
+
+// Users API
+// Post users data
+app.post("/users", async (req, res) => {
+  try {
+    const email = req.body.email;
+    const userExists = await usersCollection.findOne({ email });
+    if (userExists) {
+      return res
+        .status(200)
+        .json({ message: "User already exists!", inserted: false });
+    }
+
+    const user = req.body;
+    const result = await usersCollection.insertOne(user);
+    res.status(201).json({
+      message: "User created",
+      inserted: true,
+      insertedId: result.insertedId,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Parcels API
@@ -117,6 +145,53 @@ app.delete("/parcels/:id", async (req, res) => {
   } catch (error) {
     console.error("Delete error:", error);
     res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+// POST /tracking - Add a new tracking log
+app.post("/tracking", async (req, res) => {
+  try {
+    const {
+      tracking_id,
+      parcel_id,
+      status,
+      message,
+      updated_by = "",
+    } = req.body;
+
+    // ✅ Basic validation
+    if (!tracking_id || !parcel_id || !status || !message) {
+      return res.status(400).json({
+        success: false,
+        error:
+          "Missing required fields: tracking_id, parcel_id, status, message",
+      });
+    }
+
+    // ✅ Create tracking log object
+    const log = {
+      tracking_id,
+      parcel_id: new ObjectId(parcel_id),
+      status,
+      message,
+      time: new Date(),
+      updated_by,
+    };
+
+    // ✅ Insert into DB
+    const result = await trackingCollection.insertOne(log);
+
+    res.status(201).json({
+      success: true,
+      insertedId: result.insertedId,
+      message: "Tracking log added successfully",
+    });
+  } catch (error) {
+    console.error("❌ Error posting tracking log:", error);
+    res.status(500).json({
+      success: false,
+      error: "Internal server error",
+    });
   }
 });
 
