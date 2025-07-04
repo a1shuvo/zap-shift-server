@@ -55,6 +55,10 @@ app.post("/users", async (req, res) => {
     const email = req.body.email;
     const userExists = await usersCollection.findOne({ email });
     if (userExists) {
+      usersCollection.updateOne(
+        { email },
+        { $set: { last_log_in: new Date().toISOString() } }
+      );
       return res
         .status(200)
         .json({ message: "User already exists!", inserted: false });
