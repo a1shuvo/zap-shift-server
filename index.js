@@ -2,6 +2,7 @@
 import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
+import admin from "firebase-admin";
 import { MongoClient, ObjectId } from "mongodb";
 import Stripe from "stripe";
 
@@ -14,6 +15,12 @@ const port = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
+// firebase service account setup
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
+
 // ✅ MongoDB Client Setup
 const client = new MongoClient(process.env.MONGODB_URI, {
   serverApi: {
@@ -24,6 +31,7 @@ const client = new MongoClient(process.env.MONGODB_URI, {
 });
 
 let usersCollection;
+let ridersCollection;
 let parcelsCollection;
 let paymentsCollection;
 let trackingCollection;
@@ -33,6 +41,7 @@ async function connectDB() {
     await client.connect();
     const db = client.db("parcelDB");
     usersCollection = db.collection("users");
+    ridersCollection = db.collection("riders");
     parcelsCollection = db.collection("parcels");
     paymentsCollection = db.collection("payments");
     trackingCollection = db.collection("tracking");
@@ -42,6 +51,29 @@ async function connectDB() {
   }
 }
 connectDB();
+
+// Middlewares
+const verifyFBToken = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ message: "Unauthorized: No token provided" });
+  }
+  const token = authHeader.split(" ")[1];
+  if (!token) {
+    return res.status(401).json({ message: "Unauthorized Access" });
+  }
+
+  // verify the token
+  try {
+    const decodedToken = await admin.auth().verifyIdToken(token);
+    req.user = decodedToken;
+    next();
+  } catch (error) {
+    console.error("Token verification failed:", error);
+    res.status(403).json({ message: "Forbidden: Invalid or expired token" });
+  }
+};
 
 // ✅ Test Route
 app.get("/", (req, res) => {
@@ -76,9 +108,22 @@ app.post("/users", async (req, res) => {
   }
 });
 
+// Riders API
+// Post a rider
+app.post("/riders", async (req, res) => {
+  try {
+    const newRider = req.body;
+    const result = await ridersCollection.insertOne(newRider);
+    res.status(201).json({ insertedId: result.insertedId });
+  } catch (error) {
+    console.error("Error adding rider:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 // Parcels API
 // ✅ Get All Parcels and Parcels by User Email
-app.get("/parcels", async (req, res) => {
+app.get("/parcels", verifyFBToken, async (req, res) => {
   try {
     const { email } = req.query;
     const query = email ? { created_by: email } : {};
@@ -200,9 +245,13 @@ app.post("/tracking", async (req, res) => {
 });
 
 // Get payments history
-app.get("/payments", async (req, res) => {
+app.get("/payments", verifyFBToken, async (req, res) => {
   try {
     const userEmail = req.query.email;
+
+    if (req?.user?.email !== userEmail) {
+      res.status(403).json({ message: "Unauthorized access!" });
+    }
 
     const query = userEmail ? { email: userEmail } : {};
     const options = { sort: { paid_at: -1 } }; // Latest First
