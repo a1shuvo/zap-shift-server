@@ -129,6 +129,21 @@ app.get("/riders/pending", async (req, res) => {
   }
 });
 
+// GET /riders/active
+app.get("/riders/active", async (req, res) => {
+  try {
+    const activeRiders = await ridersCollection
+      .find({ status: "accepted" })
+      .sort({ created_at: -1 }) // newest first
+      .toArray();
+
+    res.json(activeRiders);
+  } catch (err) {
+    console.error("Failed to fetch active riders:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 // Post riders
 app.post("/riders", async (req, res) => {
   try {
@@ -141,7 +156,7 @@ app.post("/riders", async (req, res) => {
   }
 });
 
-// PATCH /riders/:id
+// PATCH /riders/:id update status
 app.patch("/riders/:id", async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
