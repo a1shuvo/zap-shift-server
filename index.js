@@ -91,7 +91,7 @@ app.post("/users", async (req, res) => {
     const email = req.body.email;
     const userExists = await usersCollection.findOne({ email });
     if (userExists) {
-      usersCollection.updateOne(
+      await usersCollection.updateOne(
         { email },
         { $set: { last_log_in: new Date().toISOString() } }
       );
@@ -159,7 +159,7 @@ app.post("/riders", async (req, res) => {
 // PATCH /riders/:id update status
 app.patch("/riders/:id", async (req, res) => {
   const { id } = req.params;
-  const { status } = req.body;
+  const { status, email } = req.body;
 
   const result = await ridersCollection.updateOne(
     { _id: new ObjectId(id) },
@@ -167,6 +167,11 @@ app.patch("/riders/:id", async (req, res) => {
       $set: { status },
     }
   );
+
+  // update user role for accepted riders
+  if (status === "accepted") {
+    await usersCollection.updateOne({ email }, { $set: { role: "rider" } });
+  }
 
   res.send(result);
 });
