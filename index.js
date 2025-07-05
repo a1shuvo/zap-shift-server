@@ -16,7 +16,11 @@ app.use(cors());
 app.use(express.json());
 
 // firebase service account setup
-const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+const serviceAccount = JSON.parse(
+  Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_JSON, "base64").toString(
+    "utf8"
+  )
+);
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
@@ -109,7 +113,23 @@ app.post("/users", async (req, res) => {
 });
 
 // Riders API
-// Post a rider
+
+// GET /riders/pending
+app.get("/riders/pending", async (req, res) => {
+  try {
+    const pendingRiders = await ridersCollection
+      .find({ status: "pending" })
+      .sort({ created_at: -1 }) // sort by latest
+      .toArray();
+
+    res.json(pendingRiders);
+  } catch (err) {
+    console.error("Error fetching pending riders:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Post riders
 app.post("/riders", async (req, res) => {
   try {
     const newRider = req.body;
@@ -119,6 +139,21 @@ app.post("/riders", async (req, res) => {
     console.error("Error adding rider:", err);
     res.status(500).json({ message: "Server error" });
   }
+});
+
+// PATCH /riders/:id
+app.patch("/riders/:id", async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+
+  const result = await ridersCollection.updateOne(
+    { _id: new ObjectId(id) },
+    {
+      $set: { status },
+    }
+  );
+
+  res.send(result);
 });
 
 // Parcels API
