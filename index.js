@@ -96,14 +96,10 @@ app.get("/users/search", async (req, res) => {
 
     const users = await usersCollection
       .find({
-        email: { $regex: new RegExp(emailQuery, "i") }, // case-insensitive partial match
+        email: { $regex: emailQuery, $options: "i" }, // ✅ case-insensitive regex
       })
       .limit(10)
       .toArray();
-
-    // if (users.length === 0) {
-    //   return res.status(404).json({ message: "No users found" });
-    // }
 
     res.status(200).json(users);
   } catch (error) {
@@ -111,6 +107,28 @@ app.get("/users/search", async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// Get user role by email
+app.get("/users/role", async (req, res) => {
+  const { email } = req.query;
+
+  if (!email) {
+    return res.status(400).json({ message: "Email is required." });
+  }
+
+  try {
+    const user = await usersCollection.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    res.status(200).json({ role: user.role });
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
 
 // Update user role to make or remove as admin
 app.patch("/users/:id/role", async (req, res) => {
