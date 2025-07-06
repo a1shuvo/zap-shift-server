@@ -85,6 +85,67 @@ app.get("/", (req, res) => {
 });
 
 // Users API
+
+// Get Users by search
+app.get("/users/search", async (req, res) => {
+  try {
+    const emailQuery = req.query.email;
+    if (!emailQuery) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const users = await usersCollection
+      .find({
+        email: { $regex: new RegExp(emailQuery, "i") }, // case-insensitive partial match
+      })
+      .limit(10)
+      .toArray();
+
+    // if (users.length === 0) {
+    //   return res.status(404).json({ message: "No users found" });
+    // }
+
+    res.status(200).json(users);
+  } catch (error) {
+    console.error("Error searching users:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update user role to make or remove as admin
+app.patch("/users/:id/role", async (req, res) => {
+  const id = req.params.id;
+  const { role } = req.body;
+
+  // ✅ Allow only "admin" or "user"
+  if (!["admin", "user"].includes(role)) {
+    return res
+      .status(400)
+      .json({ message: "Invalid role. Only 'admin' or 'user' allowed." });
+  }
+
+  try {
+    const result = await usersCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { role } }
+    );
+
+    if (result.modifiedCount === 0) {
+      return res
+        .status(404)
+        .json({ message: "User not found or role already set" });
+    }
+
+    res.status(200).json({
+      message: `User role updated to ${role}`,
+      modifiedCount: result.modifiedCount,
+    });
+  } catch (error) {
+    console.error("Failed to update user role:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
 // Post users data
 app.post("/users", async (req, res) => {
   try {
