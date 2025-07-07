@@ -56,7 +56,7 @@ async function connectDB() {
 }
 connectDB();
 
-// Middlewares
+// Custom Middlewares
 const verifyFBToken = async (req, res, next) => {
   const authHeader = req.headers.authorization;
 
@@ -75,8 +75,20 @@ const verifyFBToken = async (req, res, next) => {
     next();
   } catch (error) {
     console.error("Token verification failed:", error);
-    res.status(403).json({ message: "Forbidden: Invalid or expired token" });
+    return res
+      .status(403)
+      .json({ message: "Forbidden: Invalid or expired token" });
   }
+};
+
+const verifyAdmin = async (req, res, next) => {
+  const email = req?.decodedToken?.email;
+  const query = { email };
+  const user = await usersCollection.findOne(query);
+  if (!user || user.role !== "admin") {
+    return res.status(403).json({ message: "Forbidden Access!" });
+  }
+  next();
 };
 
 // ✅ Test Route
@@ -87,7 +99,7 @@ app.get("/", (req, res) => {
 // Users API
 
 // Get Users by search
-app.get("/users/search", async (req, res) => {
+app.get("/users/search", verifyFBToken, verifyAdmin, async (req, res) => {
   try {
     const emailQuery = req.query.email;
     if (!emailQuery) {
@@ -129,9 +141,8 @@ app.get("/users/role", async (req, res) => {
   }
 });
 
-
 // Update user role to make or remove as admin
-app.patch("/users/:id/role", async (req, res) => {
+app.patch("/users/:id/role", verifyFBToken, verifyAdmin, async (req, res) => {
   const id = req.params.id;
   const { role } = req.body;
 
@@ -194,7 +205,7 @@ app.post("/users", async (req, res) => {
 // Riders API
 
 // GET /riders/pending
-app.get("/riders/pending", async (req, res) => {
+app.get("/riders/pending", verifyFBToken, verifyAdmin, async (req, res) => {
   try {
     const pendingRiders = await ridersCollection
       .find({ status: "pending" })
@@ -209,7 +220,7 @@ app.get("/riders/pending", async (req, res) => {
 });
 
 // GET /riders/active
-app.get("/riders/active", async (req, res) => {
+app.get("/riders/active", verifyFBToken, verifyAdmin, async (req, res) => {
   try {
     const activeRiders = await ridersCollection
       .find({ status: "accepted" })
@@ -236,7 +247,7 @@ app.post("/riders", async (req, res) => {
 });
 
 // PATCH /riders/:id update status
-app.patch("/riders/:id", async (req, res) => {
+app.patch("/riders/:id", verifyFBToken, verifyAdmin, async (req, res) => {
   const { id } = req.params;
   const { status, email } = req.body;
 
@@ -381,14 +392,16 @@ app.post("/tracking", async (req, res) => {
 // Get payments history
 app.get("/payments", verifyFBToken, async (req, res) => {
   try {
-    const userEmail = req.query.email;
+    const userEmail = req.user?.email;
 
-    if (req?.user?.email !== userEmail) {
-      res.status(403).json({ message: "Unauthorized access!" });
+    if (!userEmail) {
+      return res
+        .status(401)
+        .json({ message: "Unauthorized: Invalid user token" });
     }
 
-    const query = userEmail ? { email: userEmail } : {};
-    const options = { sort: { paid_at: -1 } }; // Latest First
+    const query = { email: userEmail };
+    const options = { sort: { paid_at: -1 } };
 
     const payments = await paymentsCollection.find(query, options).toArray();
     res.json(payments);
