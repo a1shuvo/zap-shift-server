@@ -82,13 +82,23 @@ const verifyFBToken = async (req, res, next) => {
 };
 
 const verifyAdmin = async (req, res, next) => {
-  const email = req?.decodedToken?.email;
-  const query = { email };
-  const user = await usersCollection.findOne(query);
-  if (!user || user.role !== "admin") {
-    return res.status(403).json({ message: "Forbidden Access!" });
+  try {
+    const email = req?.user?.email;
+    if (!email) {
+      return res.status(401).json({ message: "Unauthorized: No token found" });
+    }
+
+    const user = await usersCollection.findOne({ email });
+
+    if (!user || user.role !== "admin") {
+      return res.status(403).json({ message: "Forbidden Access!" });
+    }
+
+    next();
+  } catch (error) {
+    console.error("verifyAdmin error:", error);
+    res.status(500).json({ message: "Server error in admin verification" });
   }
-  next();
 };
 
 // ✅ Test Route
@@ -268,13 +278,20 @@ app.patch("/riders/:id", verifyFBToken, verifyAdmin, async (req, res) => {
 
 // Parcels API
 // ✅ Get All Parcels and Parcels by User Email
-app.get("/parcels", verifyFBToken, async (req, res) => {
+app.get("/parcels", verifyFBToken, verifyAdmin, async (req, res) => {
   try {
-    const { email } = req.query;
-    const query = email ? { created_by: email } : {};
+    const { email, payment_status, delivery_status } = req.query;
+
+    const query = {};
+
+    if (email) query.created_by = email;
+    if (payment_status) query.payment_status = payment_status;
+    if (delivery_status) query.delivery_status = delivery_status;
+
     const options = {
       sort: { creation_date: -1 }, // 🔽 Latest first
     };
+
     const result = await parcelsCollection.find(query, options).toArray();
     res.send(result);
   } catch (err) {
